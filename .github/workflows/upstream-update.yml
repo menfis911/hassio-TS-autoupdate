@@ -19,17 +19,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
           current="$(tr -d '[:space:]' < torrserver/UPSTREAM_VERSION)"
           latest="$(gh api repos/YouROK/TorrServer/releases/latest --jq '.tag_name')"
-          echo "Current: $current"
-          echo "Latest:  $latest"
+
+          echo "Current TorrServer: $current"
+          echo "Latest TorrServer:  $latest"
+
           if [ "$current" = "$latest" ]; then
             echo "TorrServer is up to date."
             exit 0
           fi
+
+          addon_version="$(printf '%s' "$latest" | sed -E 's/^MatriX\.([0-9]+)\.([0-9]+)$/\1.\2.0/; s/^MatriX\.([0-9]+)$/\1.0.0/')"
+
+          if ! printf '%s\n' "$addon_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Cannot derive Home Assistant addon version from release tag: $latest"
+            exit 1
+          fi
+
           printf '%s\n' "$latest" > torrserver/UPSTREAM_VERSION
+          sed -i -E "s/^version: .*/version: ${addon_version}/" torrserver/config.yaml
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add torrserver/UPSTREAM_VERSION
+          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml
           git commit -m "Update TorrServer to $latest"
           git push
