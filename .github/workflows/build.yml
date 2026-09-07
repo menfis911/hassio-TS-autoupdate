@@ -9,7 +9,7 @@ permissions: {}
 
 env:
   ARCHITECTURES: '["amd64", "aarch64"]'
-  IMAGE_NAME: ghcr.io/menfis911/hassio-ts-autoupdate
+  IMAGE_NAME: hassio-ts-autoupdate
 
 jobs:
   init:
