@@ -14,8 +14,11 @@ RUN apk add --no-cache ca-certificates curl jq \
          aarch64) TS_ARCH="arm64" ;; \
          *) echo "Unsupported architecture: ${BUILD_ARCH}"; exit 1 ;; \
        esac \
-    && curl -fsSL "https://github.com/YouROK/TorrServer/releases/download/${TORRSERVER_VERSION}/TorrServer-linux-${TS_ARCH}" \
-       -o /usr/bin/torrserver \
+    && ASSET="TorrServer-linux-${TS_ARCH}" \
+    && EXPECTED_SHA="$(curl -fsSL "https://api.github.com/repos/YouROK/TorrServer/releases/tags/${TORRSERVER_VERSION}" | jq -r --arg name "${ASSET}" '.assets[] | select(.name == $name) | .digest' | sed 's/^sha256://')" \
+    && test -n "${EXPECTED_SHA}" \
+    && curl -fsSL "https://github.com/YouROK/TorrServer/releases/download/${TORRSERVER_VERSION}/${ASSET}" -o /usr/bin/torrserver \
+    && echo "${EXPECTED_SHA}  /usr/bin/torrserver" | sha256sum -c - \
     && chmod 0755 /usr/bin/torrserver \
     && /usr/bin/torrserver --version || true
 
