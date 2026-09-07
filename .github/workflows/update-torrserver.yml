@@ -1,0 +1,61 @@
+name: Update TorrServer upstream
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Check latest TorrServer release
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest=$(curl -fsSL https://api.github.com/repos/YouROK/TorrServer/releases/latest | jq -r '.tag_name')
+          current=$(tr -d '[:space:]' < torrserver/UPSTREAM_VERSION)
+          echo "current=${current}"
+          echo "latest=${latest}"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+          if [[ "${latest}" == "${current}" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update versions
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ steps.check.outputs.latest }}'
+          version="${tag#MatriX.}"
+          IFS='.' read -r major minor patch <<< "${version}"
+          minor=${minor:-0}
+          patch=${patch:-0}
+          addon_version="${major}.${minor}.${patch}"
+
+          printf '%s\n' "${tag}" > torrserver/UPSTREAM_VERSION
+          sed -i -E "s/^version: .*/version: ${addon_version}/" torrserver/config.yaml
+
+          echo "TorrServer ${tag} -> app version ${addon_version}"
+
+      - name: Commit update
+        if: steps.check.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml
+          git commit -m "Update TorrServer to ${{ steps.check.outputs.latest }}"
+          git push
