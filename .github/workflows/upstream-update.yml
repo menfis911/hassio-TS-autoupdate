@@ -1,0 +1,35 @@
+name: Check TorrServer updates
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check latest TorrServer release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(tr -d '[:space:]' < torrserver/UPSTREAM_VERSION)"
+          latest="$(gh api repos/YouROK/TorrServer/releases/latest --jq '.tag_name')"
+          echo "Current: $current"
+          echo "Latest:  $latest"
+          if [ "$current" = "$latest" ]; then
+            echo "TorrServer is up to date."
+            exit 0
+          fi
+          printf '%s\n' "$latest" > torrserver/UPSTREAM_VERSION
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add torrserver/UPSTREAM_VERSION
+          git commit -m "Update TorrServer to $latest"
+          git push
