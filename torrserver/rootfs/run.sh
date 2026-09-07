@@ -2,6 +2,7 @@
 set -euo pipefail
 
 TS_PORT=$(bashio::config port)
+TS_SSL_PORT=$(bashio::config ssl_port)
 mkdir -p /config /config/torrents
 FLAGS="--path /config --torrentsdir /config/torrents --port ${TS_PORT}"
 
@@ -17,7 +18,7 @@ if [[ "$(bashio::config httpauth)" = true ]]; then
 fi
 
 if [[ -n "$(bashio::config tgtoken)" ]]; then
-  FLAGS="${FLAGS} --tgtoken=$(bashio::config tgtoken)"
+  FLAGS="${FLAGS} --tg=$(bashio::config tgtoken)"
 fi
 
 if [[ -n "$(bashio::config m3u_custom_host)" ]]; then
@@ -28,6 +29,14 @@ if [[ "$(bashio::config weblog)" = true ]]; then
   FLAGS="${FLAGS} --weblogpath /dev/stdout"
 fi
 
+if [[ "$(bashio::config ssl)" = true ]]; then
+  FLAGS="${FLAGS} --ssl --sslport ${TS_SSL_PORT}"
+  SSL_CERT=$(bashio::config ssl_cert)
+  SSL_KEY=$(bashio::config ssl_key)
+  [[ -n "${SSL_CERT}" ]] && FLAGS="${FLAGS} --sslcert ${SSL_CERT}"
+  [[ -n "${SSL_KEY}" ]] && FLAGS="${FLAGS} --sslkey ${SSL_KEY}"
+fi
+
 if [[ "$(bashio::config proxymode)" != disabled ]]; then
   PROXY_MODE=$(bashio::config proxymode)
   PROXY_URL=$(bashio::config proxyurl)
@@ -35,5 +44,9 @@ if [[ "$(bashio::config proxymode)" != disabled ]]; then
   FLAGS="${FLAGS} --proxyurl=${PROXY_URL} --proxymode=${PROXY_MODE}"
 fi
 
-bashio::log.info "Starting TorrServer on port ${TS_PORT}"
+bashio::log.info "Starting TorrServer on HTTP port ${TS_PORT}"
+if [[ "$(bashio::config ssl)" = true ]]; then
+  bashio::log.info "HTTPS enabled on port ${TS_SSL_PORT}"
+fi
+
 exec /usr/bin/torrserver ${FLAGS}
