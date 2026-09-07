@@ -13,36 +13,93 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Check latest TorrServer release
+        id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
+          release_json="$(mktemp)"
+          gh api repos/YouROK/TorrServer/releases/latest > "$release_json"
+
           current="$(tr -d '[:space:]' < torrserver/UPSTREAM_VERSION)"
-          latest="$(gh api repos/YouROK/TorrServer/releases/latest --jq '.tag_name')"
+          latest="$(jq -r '.tag_name' "$release_json")"
+          release_name="$(jq -r '.name // .tag_name' "$release_json")"
 
           echo "Current TorrServer: $current"
           echo "Latest TorrServer:  $latest"
+          echo "Release name:        $release_name"
+
+          if ! printf '%s\n' "$latest" | grep -Eq '^MatriX\.[0-9]+(\.[0-9]+){0,2}$'; then
+            echo "Unsupported TorrServer release tag: $latest"
+            exit 1
+          fi
 
           if [ "$current" = "$latest" ]; then
-            echo "TorrServer is up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          addon_version="$(printf '%s' "$latest" | sed -E 's/^MatriX\.([0-9]+)\.([0-9]+)$/\1.\2.0/; s/^MatriX\.([0-9]+)$/\1.0.0/')"
+          upstream_version="${latest#MatriX.}"
+          IFS='.' read -r major minor patch <<< "$upstream_version"
+          minor="${minor:-0}"
+          patch="${patch:-0}"
+          addon_version="${major}.${minor}.${patch}"
 
           if ! printf '%s\n' "$addon_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Cannot derive Home Assistant addon version from release tag: $latest"
+            echo "Cannot derive Home Assistant version from $latest"
             exit 1
           fi
+
+          release_date="$(jq -r '.published_at // .created_at // ""' "$release_json" | cut -d'T' -f1)"
+          release_body="$(jq -r '.body // "No release notes were provided by upstream."' "$release_json")"
 
           printf '%s\n' "$latest" > torrserver/UPSTREAM_VERSION
           sed -i -E "s/^version: .*/version: ${addon_version}/" torrserver/config.yaml
 
+          python3 - "$release_name" "$latest" "$release_date" "$release_body" <<'PY'
+          from pathlib import Path
+          import sys
+
+          name, tag, date, body = sys.argv[1:]
+          changelog = Path("CHANGELOG.md")
+          existing = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Changelog\n\n"
+
+          marker = f"## {tag}"
+          if marker in existing:
+              raise SystemExit(f"Changelog entry for {tag} already exists")
+
+          title = name if name and name != "null" else tag
+          date_suffix = f" — {date}" if date else ""
+          entry = (
+              f"## {tag}{date_suffix}\n\n"
+              f"**TorrServer:** `{tag}`  \n"
+              f"**Upstream release:** {title}\n\n"
+              "### Release notes from upstream\n\n"
+              f"{body.strip()}\n\n"
+          )
+
+          prefix = "# Changelog\n\n"
+          if existing.startswith(prefix):
+              existing = existing[len(prefix):]
+          changelog.write_text(prefix + entry + existing, encoding="utf-8")
+          PY
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "addon_version=$addon_version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit update
+        if: steps.release.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml
-          git commit -m "Update TorrServer to $latest"
+          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml CHANGELOG.md
+          git commit -m "Update TorrServer to ${{ steps.release.outputs.latest }}"
           git push
