@@ -1,12 +1,11 @@
 # Changelog
 
-## 144.1.12 — MQTT Uptime sensor
+## 144.1.13 — Human-readable MQTT Uptime
 
-### Добавлено
-- Добавлен MQTT Discovery-сенсор `Uptime` для TorrServer.
-- Uptime публикуется в секундах с `device_class: duration`.
-- Счётчик uptime автоматически начинается заново после каждого запуска или автоматического restart TorrServer.
-- Uptime обновляется вместе с острыми MQTT-метриками без изменения существующих MQTT topics.
+### Изменено
+- Uptime теперь отображается в Home Assistant в человекочитаемом формате: `ч мин с`.
+- Например: `5 ч 27 мин 14 с`.
+- MQTT Uptime больше не публикуется как числовой sensor с `device_class: duration`; теперь это обычный текстовый sensor для корректного отображения часов, минут и секунд.
 
 ### Сохранено
 - TorrServer `MatriX.144.1`.
@@ -15,5 +14,5 @@
 - WebSocket и streaming.
 - Автоматический healthcheck и recovery TorrServer.
 - Все существующие настройки TorrServer.
-- MQTT Discovery для Status, Version, Torrents, Storage free и Restarts.
+- MQTT Discovery для Status, Version, Torrents, Storage free, Restarts и Uptime.
 - Иконка Add-on и `panel_icon: mdi:movie-open-play`.
