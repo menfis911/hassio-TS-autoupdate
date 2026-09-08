@@ -4,6 +4,7 @@ set -euo pipefail
 TS_PORT=$(bashio::config port)
 TS_SSL_PORT=$(bashio::config ssl_port)
 TS_INTERNAL_PORT=18090
+TS_RESTART_COUNT=0
 
 mkdir -p /config /config/torrents /run/nginx
 
@@ -66,9 +67,6 @@ http {
         listen ${TS_PORT};
         server_name _;
 
-        # Home Assistant Ingress enters the add-on at /ui. TorrServer's
-        # frontend is built for relative API paths, so keep the /ui prefix
-        # in the browser URL and strip it before proxying to TorrServer.
         location = /ui {
             return 301 /ui/;
         }
@@ -88,7 +86,6 @@ http {
             proxy_buffering off;
         }
 
-        # Direct LAN access keeps the normal TorrServer root URL.
         location / {
             proxy_pass http://127.0.0.1:${TS_INTERNAL_PORT};
             proxy_http_version 1.1;
@@ -107,14 +104,68 @@ http {
 }
 EOF
 
-bashio::log.info "Starting TorrServer on internal HTTP port ${TS_INTERNAL_PORT}"
+start_torrserver() {
+  bashio::log.info "Starting TorrServer on internal HTTP port ${TS_INTERNAL_PORT}"
+  /usr/bin/torrserver ${FLAGS} &
+  TS_PID=$!
+  sleep 2
+
+  local version_response
+  if version_response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
+    bashio::log.info "TorrServer healthcheck: OK (version: ${version_response})"
+  else
+    bashio::log.warning "TorrServer started, but healthcheck is not ready yet"
+  fi
+}
+
+restart_torrserver() {
+  TS_RESTART_COUNT=$((TS_RESTART_COUNT + 1))
+  bashio::log.warning "TorrServer healthcheck failed; restarting TorrServer (restart #${TS_RESTART_COUNT})"
+
+  kill "${TS_PID}" 2>/dev/null || true
+  wait "${TS_PID}" 2>/dev/null || true
+
+  start_torrserver
+}
+
 if [[ "$(bashio::config ssl)" = true ]]; then
   bashio::log.info "TorrServer HTTPS is enabled on port ${TS_SSL_PORT}"
 fi
 bashio::log.info "Starting Home Assistant web proxy on port ${TS_PORT}"
 
-/usr/bin/torrserver ${FLAGS} &
-TS_PID=$!
+TS_PID=0
+start_torrserver
+
+health_monitor_loop() {
+  local failures=0
+  local response
+
+  while true; do
+    if ! kill -0 "${TS_PID}" 2>/dev/null; then
+      bashio::log.warning "TorrServer process is not running; starting it again"
+      start_torrserver
+      failures=0
+      sleep 5
+      continue
+    fi
+
+    if response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
+      if (( failures > 0 )); then
+        bashio::log.info "TorrServer healthcheck recovered (version: ${response})"
+      fi
+      failures=0
+    else
+      failures=$((failures + 1))
+      bashio::log.warning "TorrServer healthcheck failed (${failures}/3)"
+      if (( failures >= 3 )); then
+        restart_torrserver
+        failures=0
+      fi
+    fi
+
+    sleep 10
+  done
+}
 
 publish_mqtt() {
   local topic="$1"
@@ -155,6 +206,7 @@ mqtt_metrics_loop() {
   publish_mqtt "${base}/sensor/version/config" "{\"name\":\"Version\",\"unique_id\":\"torrserver_version\",\"state_topic\":\"${base}/version\",\"icon\":\"mdi:information-outline\",\"device\":${device}}"
   publish_mqtt "${base}/sensor/torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}"
   publish_mqtt "${base}/sensor/storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}"
+  publish_mqtt "${base}/sensor/restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}"
 
   bashio::log.info "MQTT discovery sensors enabled"
 
@@ -166,10 +218,11 @@ mqtt_metrics_loop() {
     auth_args=(-u "${first_login}:${first_password}")
   fi
 
-  while kill -0 "${TS_PID}" 2>/dev/null; do
+  while true; do
     if echo_response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
       publish_mqtt "${base}/status" "online"
       publish_mqtt "${base}/version" "${echo_response}"
+      publish_mqtt "${base}/restarts" "${TS_RESTART_COUNT}"
 
       if torrent_count="$(curl -fsS --max-time 5 "${auth_args[@]}" -H 'Content-Type: application/json' -d '{"action":"list"}' "http://127.0.0.1:${TS_INTERNAL_PORT}/torrents" 2>/dev/null | jq 'length' 2>/dev/null)"; then
         publish_mqtt "${base}/torrents" "${torrent_count}"
@@ -185,16 +238,17 @@ mqtt_metrics_loop() {
 
     sleep 15
   done
-
-  publish_mqtt "${base}/status" "offline"
 }
 
 MQTT_ARGS=()
+health_monitor_loop &
+HEALTH_PID=$!
 mqtt_metrics_loop &
 MQTT_PID=$!
 
 cleanup() {
   kill "${MQTT_PID}" 2>/dev/null || true
+  kill "${HEALTH_PID}" 2>/dev/null || true
   kill "${TS_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
