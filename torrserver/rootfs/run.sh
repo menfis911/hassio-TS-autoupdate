@@ -308,3 +308,69 @@ mqtt_metrics_loop() {
     fi
 
     mqtt_failures=0
+    if [[ "${mqtt_connected}" != true ]]; then
+      bashio::log.info "MQTT connected: ${mqtt_host}:${mqtt_port}"
+    fi
+
+    if ! publish_mqtt_discovery; then
+      bashio::log.warning "MQTT Discovery publish failed; will retry"
+      mqtt_connected=false
+      sleep 15
+      continue
+    fi
+
+    if [[ "${mqtt_connected}" != true ]]; then
+      bashio::log.info "MQTT Discovery published successfully for TorrServer"
+    fi
+    mqtt_connected=true
+
+    if bashio::config.true httpauth; then
+      local first_login first_password
+      first_login="$(bashio::config 'logins[0].username')"
+      first_password="$(bashio::config 'logins[0].password')"
+      auth_args=(-u "${first_login}:${first_password}")
+    fi
+
+    if echo_response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
+      publish_mqtt "${state_base}/status" "online" || true
+      publish_mqtt "${state_base}/version" "${echo_response}" || true
+      publish_mqtt "${state_base}/restarts" "${TS_RESTART_COUNT}" || true
+
+      uptime=$(( $(date +%s) - TS_STARTED_AT ))
+      (( uptime < 0 )) && uptime=0
+      uptime_h=$((uptime / 3600))
+      uptime_m=$(((uptime % 3600) / 60))
+      uptime_s=$((uptime % 60))
+      uptime_display="${uptime_h} ч ${uptime_m} мин ${uptime_s} с"
+      publish_mqtt "${state_base}/uptime" "${uptime_display}" || true
+
+      if torrent_count="$(curl -fsS --max-time 5 "${auth_args[@]}" -H 'Content-Type: application/json' -d '{"action":"list"}' "http://127.0.0.1:${TS_INTERNAL_PORT}/torrents" 2>/dev/null | jq 'length' 2>/dev/null)"; then
+        publish_mqtt "${state_base}/torrents" "${torrent_count}" || true
+      fi
+
+      if free_kb="$(df -Pk /config 2>/dev/null | awk 'NR==2 {print $4}')" && [[ "${free_kb}" =~ ^[0-9]+$ ]]; then
+        free_gb="$(awk -v kb="${free_kb}" 'BEGIN {printf "%.2f", kb/1024/1024}')"
+        publish_mqtt "${state_base}/storage_free" "${free_gb}" || true
+      fi
+    else
+      publish_mqtt "${state_base}/status" "offline" || true
+    fi
+
+    sleep 15
+  done
+}
+
+MQTT_ARGS=()
+health_monitor_loop &
+HEALTH_PID=$!
+mqtt_metrics_loop &
+MQTT_PID=$!
+
+cleanup() {
+  kill "${MQTT_PID}" 2>/dev/null || true
+  kill "${HEALTH_PID}" 2>/dev/null || true
+  kill "${TS_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+nginx -c /run/nginx/nginx.conf -g 'daemon off;'
