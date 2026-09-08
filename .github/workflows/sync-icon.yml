@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - icon.png
+      - torrserver/icon.png
 
 permissions:
   contents: write
@@ -18,17 +18,17 @@ jobs:
 
       - name: Download TorrServer icon
         run: |
-          curl -fL https://raw.githubusercontent.com/YouROK/TorrServer/master/web/public/icon.png -o icon.png
+          curl -fL https://raw.githubusercontent.com/YouROK/TorrServer/master/web/public/icon.png -o torrserver/icon.png
 
       - name: Commit icon if changed
         run: |
-          if git diff --quiet -- icon.png && git ls-files --error-unmatch icon.png >/dev/null 2>&1; then
+          if git diff --quiet -- torrserver/icon.png && git ls-files --error-unmatch torrserver/icon.png >/dev/null 2>&1; then
             echo "Icon is already up to date"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add icon.png
+          git add torrserver/icon.png
           git commit -m "Add TorrServer add-on icon"
           git push
