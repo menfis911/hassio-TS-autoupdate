@@ -14,7 +14,7 @@ image: ghcr.io/menfis911/hassio-ts-autoupdate
 map:
   - addon_config:rw
 services:
-  - mqtt:need
+  - mqtt:want
 options:
   port: 8090
   httpauth: false
