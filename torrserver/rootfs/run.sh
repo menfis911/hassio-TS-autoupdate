@@ -170,7 +170,18 @@ health_monitor_loop() {
 publish_mqtt() {
   local topic="$1"
   local payload="$2"
-  mosquitto_pub "${MQTT_ARGS[@]}" -r -t "${topic}" -m "${payload}" >/dev/null 2>&1 || true
+  mosquitto_pub "${MQTT_ARGS[@]}" -r -t "${topic}" -m "${payload}" >/dev/null 2>&1
+}
+
+publish_mqtt_discovery() {
+  local base="$1"
+  local device='{"identifiers":["torrserver_autoupdate"],"name":"TorrServer","manufacturer":"menfis911","model":"TorrServer AutoUpdate"}'
+
+  publish_mqtt "${base}/binary_sensor/status/config" "{\"name\":\"Status\",\"unique_id\":\"torrserver_status\",\"state_topic\":\"${base}/status\",\"payload_on\":\"online\",\"payload_off\":\"offline\",\"device\":${device}}" && \
+  publish_mqtt "${base}/sensor/version/config" "{\"name\":\"Version\",\"unique_id\":\"torrserver_version\",\"state_topic\":\"${base}/version\",\"icon\":\"mdi:information-outline\",\"device\":${device}}" && \
+  publish_mqtt "${base}/sensor/torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}" && \
+  publish_mqtt "${base}/sensor/storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}" && \
+  publish_mqtt "${base}/sensor/restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}"
 }
 
 mqtt_metrics_loop() {
@@ -179,61 +190,91 @@ mqtt_metrics_loop() {
     return 0
   fi
 
-  local mqtt_host mqtt_port mqtt_user mqtt_password mqtt_ssl
-  mqtt_host="$(bashio::services mqtt host 2>/dev/null || true)"
-  mqtt_port="$(bashio::services mqtt port 2>/dev/null || true)"
-  mqtt_user="$(bashio::services mqtt username 2>/dev/null || true)"
-  mqtt_password="$(bashio::services mqtt password 2>/dev/null || true)"
-  mqtt_ssl="$(bashio::services mqtt ssl 2>/dev/null || true)"
-
-  if [[ -z "${mqtt_host}" || -z "${mqtt_port}" ]]; then
-    bashio::log.info "MQTT service is not available; TorrServer sensors are disabled"
-    return 0
-  fi
-
-  MQTT_ARGS=(-h "${mqtt_host}" -p "${mqtt_port}" -q 1)
-  [[ -n "${mqtt_user}" ]] && MQTT_ARGS+=(-u "${mqtt_user}")
-  [[ -n "${mqtt_password}" ]] && MQTT_ARGS+=(-P "${mqtt_password}")
-
-  if [[ "${mqtt_ssl}" = true ]]; then
-    MQTT_ARGS+=(--insecure)
-  fi
-
   local base="homeassistant/torrserver"
-  local device='{"identifiers":["torrserver_autoupdate"],"name":"TorrServer","manufacturer":"menfis911","model":"TorrServer AutoUpdate"}'
-
-  publish_mqtt "${base}/binary_sensor/status/config" "{\"name\":\"Status\",\"unique_id\":\"torrserver_status\",\"state_topic\":\"${base}/status\",\"payload_on\":\"online\",\"payload_off\":\"offline\",\"device\":${device}}"
-  publish_mqtt "${base}/sensor/version/config" "{\"name\":\"Version\",\"unique_id\":\"torrserver_version\",\"state_topic\":\"${base}/version\",\"icon\":\"mdi:information-outline\",\"device\":${device}}"
-  publish_mqtt "${base}/sensor/torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}"
-  publish_mqtt "${base}/sensor/storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}"
-  publish_mqtt "${base}/sensor/restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}"
-
-  bashio::log.info "MQTT discovery sensors enabled"
-
   local echo_response torrent_count free_kb free_gb auth_args=()
-  if bashio::config.true httpauth; then
-    local first_login first_password
-    first_login="$(bashio::config 'logins[0].username')"
-    first_password="$(bashio::config 'logins[0].password')"
-    auth_args=(-u "${first_login}:${first_password}")
-  fi
+  local mqtt_host mqtt_port mqtt_user mqtt_password mqtt_ssl
+  local mqtt_connected=false
+  local mqtt_failures=0
 
   while true; do
+    if ! bashio::services.available "mqtt"; then
+      if (( mqtt_failures == 0 || mqtt_failures % 4 == 0 )); then
+        bashio::log.warning "MQTT service is not available yet; retrying"
+      fi
+      mqtt_failures=$((mqtt_failures + 1))
+      sleep 15
+      continue
+    fi
+
+    mqtt_host="$(bashio::services mqtt "host" 2>/dev/null || true)"
+    mqtt_port="$(bashio::services mqtt "port" 2>/dev/null || true)"
+    mqtt_user="$(bashio::services mqtt "username" 2>/dev/null || true)"
+    mqtt_password="$(bashio::services mqtt "password" 2>/dev/null || true)"
+    mqtt_ssl="$(bashio::services mqtt "ssl" 2>/dev/null || true)"
+
+    if [[ -z "${mqtt_host}" || -z "${mqtt_port}" ]]; then
+      if (( mqtt_failures == 0 || mqtt_failures % 4 == 0 )); then
+        bashio::log.warning "MQTT service was found, but connection details are unavailable; retrying"
+      fi
+      mqtt_failures=$((mqtt_failures + 1))
+      sleep 15
+      continue
+    fi
+
+    MQTT_ARGS=(-h "${mqtt_host}" -p "${mqtt_port}" -q 1)
+    [[ -n "${mqtt_user}" ]] && MQTT_ARGS+=(-u "${mqtt_user}")
+    [[ -n "${mqtt_password}" ]] && MQTT_ARGS+=(-P "${mqtt_password}")
+    [[ "${mqtt_ssl}" = true ]] && MQTT_ARGS+=(--insecure)
+
+    if ! publish_mqtt "${base}/status" "online"; then
+      if [[ "${mqtt_connected}" = true || ${mqtt_failures} -eq 0 || $((mqtt_failures % 4)) -eq 0 ]]; then
+        bashio::log.warning "MQTT broker connection failed; retrying"
+      fi
+      mqtt_connected=false
+      mqtt_failures=$((mqtt_failures + 1))
+      sleep 15
+      continue
+    fi
+
+    mqtt_failures=0
+    if [[ "${mqtt_connected}" != true ]]; then
+      bashio::log.info "MQTT connected: ${mqtt_host}:${mqtt_port}"
+    fi
+
+    if ! publish_mqtt_discovery "${base}"; then
+      bashio::log.warning "MQTT Discovery publish failed; will retry"
+      mqtt_connected=false
+      sleep 15
+      continue
+    fi
+
+    if [[ "${mqtt_connected}" != true ]]; then
+      bashio::log.info "MQTT Discovery published for TorrServer"
+    fi
+    mqtt_connected=true
+
+    if bashio::config.true httpauth; then
+      local first_login first_password
+      first_login="$(bashio::config 'logins[0].username')"
+      first_password="$(bashio::config 'logins[0].password')"
+      auth_args=(-u "${first_login}:${first_password}")
+    fi
+
     if echo_response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
-      publish_mqtt "${base}/status" "online"
-      publish_mqtt "${base}/version" "${echo_response}"
-      publish_mqtt "${base}/restarts" "${TS_RESTART_COUNT}"
+      publish_mqtt "${base}/status" "online" || true
+      publish_mqtt "${base}/version" "${echo_response}" || true
+      publish_mqtt "${base}/restarts" "${TS_RESTART_COUNT}" || true
 
       if torrent_count="$(curl -fsS --max-time 5 "${auth_args[@]}" -H 'Content-Type: application/json' -d '{"action":"list"}' "http://127.0.0.1:${TS_INTERNAL_PORT}/torrents" 2>/dev/null | jq 'length' 2>/dev/null)"; then
-        publish_mqtt "${base}/torrents" "${torrent_count}"
+        publish_mqtt "${base}/torrents" "${torrent_count}" || true
       fi
 
       if free_kb="$(df -Pk /config 2>/dev/null | awk 'NR==2 {print $4}')" && [[ "${free_kb}" =~ ^[0-9]+$ ]]; then
         free_gb="$(awk -v kb="${free_kb}" 'BEGIN {printf "%.2f", kb/1024/1024}')"
-        publish_mqtt "${base}/storage_free" "${free_gb}"
+        publish_mqtt "${base}/storage_free" "${free_gb}" || true
       fi
     else
-      publish_mqtt "${base}/status" "offline"
+      publish_mqtt "${base}/status" "offline" || true
     fi
 
     sleep 15
