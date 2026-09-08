@@ -2,6 +2,17 @@
 
 Все изменения проекта фиксируются здесь. Версия Home Assistant Add-on соответствует версии проекта, а `UPSTREAM_VERSION` содержит точную версию TorrServer.
 
+## 144.1.3 — maintenance
+
+**TorrServer:** `MatriX.144.1`
+
+### Исправлено
+- Исправлена работа Web UI через Home Assistant Ingress.
+- Для Ingress добавлена стабильная точка входа `/ui/`.
+- nginx сохраняет `/ui/` в URL браузера и удаляет этот префикс перед передачей запросов TorrServer.
+- Прямой доступ через `IP:8090` сохранён без изменения.
+- WebSocket, streaming и длинные таймауты сохранены.
+
 ## 144.1.2 — maintenance
 
 **TorrServer:** `MatriX.144.1`
