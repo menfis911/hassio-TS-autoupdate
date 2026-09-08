@@ -12,6 +12,7 @@ Home Assistant Add-on для TorrServer для личного использов
 - сохраняет настройки и torrent-данные между обновлениями;
 - поддерживает HTTP Basic Auth, Telegram token, proxy и SSL;
 - поддерживает Home Assistant Ingress и Watchdog;
+- публикует статус и базовые показатели в Home Assistant через MQTT Discovery;
 - проверяет SHA-256 release asset перед сборкой.
 
 ## Обновления
@@ -19,6 +20,19 @@ Home Assistant Add-on для TorrServer для личного использов
 При выходе новой стабильной версии TorrServer проект автоматически обновляет версию Add-on, собирает новый образ и публикует его в GHCR.
 
 Если в Home Assistant включено автоматическое обновление Add-on, новая версия будет установлена автоматически.
+
+## Сенсоры и дашборд
+
+Если в Home Assistant настроен MQTT, Add-on автоматически создаёт устройство `TorrServer` с сенсорами:
+
+- статус TorrServer;
+- текущая версия;
+- количество torrent-задач;
+- свободное место в `/config`.
+
+Готовая карточка для главного экрана находится в `torrserver/DASHBOARD.md`.
+
+MQTT Discovery можно отключить в настройках Add-on параметром `mqtt_discovery`.
 
 ## Версионность
 
