@@ -8,7 +8,7 @@ ARG BUILD_ARCH
 ARG BUILD_VERSION
 ARG TORRSERVER_VERSION
 
-RUN apk add --no-cache ca-certificates curl jq \
+RUN apk add --no-cache ca-certificates curl jq nginx \
     && case "${BUILD_ARCH}" in \
          amd64) TS_ARCH="amd64" ;; \
          aarch64) TS_ARCH="arm64" ;; \
