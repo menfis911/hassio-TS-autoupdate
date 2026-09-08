@@ -2,6 +2,24 @@
 
 Все изменения проекта фиксируются здесь. Версия Home Assistant Add-on соответствует версии проекта, а `UPSTREAM_VERSION` содержит точную версию TorrServer.
 
+## 144.1.4 — project polish
+
+### Изменено
+- Добавлена собственная иконка Home Assistant Add-on.
+- Changelog внутри Add-on теперь содержит только изменения текущей версии.
+- Полная история изменений проекта хранится только в этом файле.
+- Упрощено описание проекта и документация.
+
+## 144.1.3 — Home Assistant Ingress
+
+**TorrServer:** `MatriX.144.1`
+
+### Исправлено
+- Улучшена работа Web UI через Home Assistant Ingress.
+- Добавлена стабильная точка входа `/ui/` для Ingress.
+- Прямой доступ через `IP:8090` сохранён.
+- WebSocket, streaming и длинные таймауты сохранены.
+
 ## 144.1.0 — production
 
 **TorrServer:** `MatriX.144.1`
@@ -16,7 +34,6 @@
 - Публикация образов в GHCR.
 - Автоматическая проверка новых стабильных релизов TorrServer каждые 3 дня в 03:00 МСК.
 - Автоматическая синхронизация версии Add-on с версией TorrServer.
-- Автоматическое добавление release notes TorrServer в этот changelog.
 - Поддержка HTTP Basic Auth, Telegram token, proxy, web log и SSL.
 
 ## 0.5.0 — development milestone
