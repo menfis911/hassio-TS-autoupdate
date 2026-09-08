@@ -65,27 +65,38 @@ jobs:
           import sys
 
           name, tag, date, body = sys.argv[1:]
-          changelog = Path("torrserver/CHANGELOG.md")
-          existing = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Changelog\n\n"
-
-          marker = f"## {tag}"
-          if marker in existing:
-              raise SystemExit(f"Changelog entry for {tag} already exists")
-
           title = name if name and name != "null" else tag
           date_suffix = f" — {date}" if date else ""
-          entry = (
+          notes = body.strip() or "No release notes were provided by upstream."
+
+          # The repository changelog keeps the complete project history.
+          root = Path("CHANGELOG.md")
+          existing = root.read_text(encoding="utf-8") if root.exists() else "# Changelog\n\n"
+          marker = f"## {tag}"
+          if marker not in existing:
+              entry = (
+                  f"## {tag}{date_suffix}\n\n"
+                  f"**TorrServer:** `{tag}`  \n"
+                  f"**Upstream release:** {title}\n\n"
+                  "### Release notes from upstream\n\n"
+                  f"{notes}\n\n"
+              )
+              prefix = "# Changelog\n\n"
+              if existing.startswith(prefix):
+                  existing = existing[len(prefix):]
+              root.write_text(prefix + entry + existing, encoding="utf-8")
+
+          # Home Assistant shows only the current release in the add-on UI.
+          addon = Path("torrserver/CHANGELOG.md")
+          addon_text = (
+              "# Changelog\n\n"
               f"## {tag}{date_suffix}\n\n"
               f"**TorrServer:** `{tag}`  \n"
               f"**Upstream release:** {title}\n\n"
               "### Release notes from upstream\n\n"
-              f"{body.strip()}\n\n"
+              f"{notes}\n"
           )
-
-          prefix = "# Changelog\n\n"
-          if existing.startswith(prefix):
-              existing = existing[len(prefix):]
-          changelog.write_text(prefix + entry + existing, encoding="utf-8")
+          addon.write_text(addon_text, encoding="utf-8")
           PY
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -100,6 +111,6 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml torrserver/CHANGELOG.md
+          git add CHANGELOG.md torrserver/UPSTREAM_VERSION torrserver/config.yaml torrserver/CHANGELOG.md
           git commit -m "Update TorrServer to ${{ steps.release.outputs.latest }}"
           git push
