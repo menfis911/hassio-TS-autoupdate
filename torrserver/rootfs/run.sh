@@ -170,18 +170,35 @@ health_monitor_loop() {
 publish_mqtt() {
   local topic="$1"
   local payload="$2"
-  mosquitto_pub "${MQTT_ARGS[@]}" -r -t "${topic}" -m "${payload}" >/dev/null 2>&1
+  local output rc
+
+  if output="$(mosquitto_pub "${MQTT_ARGS[@]}" -r -t "${topic}" -m "${payload}" 2>&1)"; then
+    bashio::log.info "MQTT publish OK: ${topic}"
+    return 0
+  fi
+
+  rc=$?
+  if [[ -n "${output}" ]]; then
+    bashio::log.error "MQTT publish FAILED: ${topic} (exit ${rc}): ${output}"
+  else
+    bashio::log.error "MQTT publish FAILED: ${topic} (exit ${rc})"
+  fi
+  return "${rc}"
 }
 
 publish_mqtt_discovery() {
-  local base="$1"
+  local state_base="homeassistant/torrserver"
+  local discovery_base="homeassistant"
   local device='{"identifiers":["torrserver_autoupdate"],"name":"TorrServer","manufacturer":"menfis911","model":"TorrServer AutoUpdate"}'
+  local failed=0
 
-  publish_mqtt "${base}/binary_sensor/status/config" "{\"name\":\"Status\",\"unique_id\":\"torrserver_status\",\"state_topic\":\"${base}/status\",\"payload_on\":\"online\",\"payload_off\":\"offline\",\"device\":${device}}" && \
-  publish_mqtt "${base}/sensor/version/config" "{\"name\":\"Version\",\"unique_id\":\"torrserver_version\",\"state_topic\":\"${base}/version\",\"icon\":\"mdi:information-outline\",\"device\":${device}}" && \
-  publish_mqtt "${base}/sensor/torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}" && \
-  publish_mqtt "${base}/sensor/storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}" && \
-  publish_mqtt "${base}/sensor/restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}"
+  publish_mqtt "${discovery_base}/binary_sensor/torrserver_status/config" "{\"name\":\"Status\",\"unique_id\":\"torrserver_status\",\"state_topic\":\"${state_base}/status\",\"payload_on\":\"online\",\"payload_off\":\"offline\",\"device\":${device}}" || failed=1
+  publish_mqtt "${discovery_base}/sensor/torrserver_version/config" "{\"name\":\"Version\",\"unique_id\":\"torrserver_version\",\"state_topic\":\"${state_base}/version\",\"icon\":\"mdi:information-outline\",\"device\":${device}}" || failed=1
+  publish_mqtt "${discovery_base}/sensor/torrserver_torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${state_base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}" || failed=1
+  publish_mqtt "${discovery_base}/sensor/torrserver_storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${state_base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}" || failed=1
+  publish_mqtt "${discovery_base}/sensor/torrserver_restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${state_base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}" || failed=1
+
+  return "${failed}"
 }
 
 mqtt_metrics_loop() {
@@ -190,7 +207,8 @@ mqtt_metrics_loop() {
     return 0
   fi
 
-  local base="homeassistant/torrserver"
+  local state_base="homeassistant/torrserver"
+  local diagnostic_topic="torrserver/diagnostic"
   local echo_response torrent_count free_kb free_gb auth_args=()
   local mqtt_host mqtt_port mqtt_user mqtt_password mqtt_ssl
   local mqtt_connected=false
@@ -226,9 +244,9 @@ mqtt_metrics_loop() {
     [[ -n "${mqtt_password}" ]] && MQTT_ARGS+=(-P "${mqtt_password}")
     [[ "${mqtt_ssl}" = true ]] && MQTT_ARGS+=(--insecure)
 
-    if ! publish_mqtt "${base}/status" "online"; then
+    if ! publish_mqtt "${diagnostic_topic}" "online"; then
       if [[ "${mqtt_connected}" = true || ${mqtt_failures} -eq 0 || $((mqtt_failures % 4)) -eq 0 ]]; then
-        bashio::log.warning "MQTT broker connection failed; retrying"
+        bashio::log.warning "MQTT broker publish test failed; retrying"
       fi
       mqtt_connected=false
       mqtt_failures=$((mqtt_failures + 1))
@@ -241,7 +259,7 @@ mqtt_metrics_loop() {
       bashio::log.info "MQTT connected: ${mqtt_host}:${mqtt_port}"
     fi
 
-    if ! publish_mqtt_discovery "${base}"; then
+    if ! publish_mqtt_discovery; then
       bashio::log.warning "MQTT Discovery publish failed; will retry"
       mqtt_connected=false
       sleep 15
@@ -249,7 +267,7 @@ mqtt_metrics_loop() {
     fi
 
     if [[ "${mqtt_connected}" != true ]]; then
-      bashio::log.info "MQTT Discovery published for TorrServer"
+      bashio::log.info "MQTT Discovery published successfully for TorrServer"
     fi
     mqtt_connected=true
 
@@ -261,20 +279,20 @@ mqtt_metrics_loop() {
     fi
 
     if echo_response="$(curl -fsS --max-time 3 "http://127.0.0.1:${TS_INTERNAL_PORT}/echo" 2>/dev/null)"; then
-      publish_mqtt "${base}/status" "online" || true
-      publish_mqtt "${base}/version" "${echo_response}" || true
-      publish_mqtt "${base}/restarts" "${TS_RESTART_COUNT}" || true
+      publish_mqtt "${state_base}/status" "online" || true
+      publish_mqtt "${state_base}/version" "${echo_response}" || true
+      publish_mqtt "${state_base}/restarts" "${TS_RESTART_COUNT}" || true
 
       if torrent_count="$(curl -fsS --max-time 5 "${auth_args[@]}" -H 'Content-Type: application/json' -d '{"action":"list"}' "http://127.0.0.1:${TS_INTERNAL_PORT}/torrents" 2>/dev/null | jq 'length' 2>/dev/null)"; then
-        publish_mqtt "${base}/torrents" "${torrent_count}" || true
+        publish_mqtt "${state_base}/torrents" "${torrent_count}" || true
       fi
 
       if free_kb="$(df -Pk /config 2>/dev/null | awk 'NR==2 {print $4}')" && [[ "${free_kb}" =~ ^[0-9]+$ ]]; then
         free_gb="$(awk -v kb="${free_kb}" 'BEGIN {printf "%.2f", kb/1024/1024}')"
-        publish_mqtt "${base}/storage_free" "${free_gb}" || true
+        publish_mqtt "${state_base}/storage_free" "${free_gb}" || true
       fi
     else
-      publish_mqtt "${base}/status" "offline" || true
+      publish_mqtt "${state_base}/status" "offline" || true
     fi
 
     sleep 15
