@@ -55,5 +55,5 @@ ingress_stream: true
 host_network: true
 watchdog: "http://[HOST]:[PORT:8090]/echo"
 startup: system
-panel_icon: mdi:server-network
+panel_icon: mdi:movie-open-play
 panel_title: TorrServer
