@@ -2,6 +2,23 @@
 
 Все изменения проекта фиксируются здесь. Версия Home Assistant Add-on соответствует версии проекта, а `UPSTREAM_VERSION` содержит точную версию TorrServer.
 
+## 144.1.13 — Human-readable MQTT Uptime
+
+### Изменено
+- Uptime теперь отображается в Home Assistant в человекочитаемом формате: `ч мин с`.
+- Например: `5 ч 27 мин 14 с`.
+- MQTT Uptime больше не публикуется как числовой sensor с `device_class: duration`; теперь это обычный текстовый sensor для корректного отображения часов, минут и секунд.
+
+### Сохранено
+- TorrServer `MatriX.144.1`.
+- Home Assistant Ingress `/ui/`.
+- Прямой доступ через порт `8090`.
+- WebSocket и streaming.
+- Автоматический healthcheck и recovery TorrServer.
+- Все существующие настройки TorrServer.
+- MQTT Discovery для Status, Version, Torrents, Storage free, Restarts и Uptime.
+- Собственная иконка Add-on и `panel_icon: mdi:movie-open-play`.
+
 ## 144.1.12 — MQTT Uptime sensor
 
 ### Добавлено
@@ -131,7 +148,7 @@
 - Собственный Home Assistant Add-on `TorrServer AutoUpdate`.
 - Сборка multi-arch для `amd64` и `aarch64`.
 - Использование официального бинарного релиза TorrServer.
-- Проверка SHA-256 digest официального release asset перед включением бинарника в образ.
+- Проверка SHA-256 digest официального бинарника TorrServer перед включением бинарника в образ.
 - Публикация образов в GHCR.
 - Автоматическая проверка новых стабильных релизов TorrServer каждые 3 дня.
 - Автоматическая синхронизация версии Add-on с версией TorrServer.
