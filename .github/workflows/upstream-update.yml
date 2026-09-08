@@ -65,7 +65,7 @@ jobs:
           import sys
 
           name, tag, date, body = sys.argv[1:]
-          changelog = Path("CHANGELOG.md")
+          changelog = Path("torrserver/CHANGELOG.md")
           existing = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Changelog\n\n"
 
           marker = f"## {tag}"
@@ -100,6 +100,6 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml CHANGELOG.md
+          git add torrserver/UPSTREAM_VERSION torrserver/config.yaml torrserver/CHANGELOG.md
           git commit -m "Update TorrServer to ${{ steps.release.outputs.latest }}"
           git push
