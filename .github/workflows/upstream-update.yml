@@ -33,7 +33,7 @@ jobs:
           echo "Current TorrServer: $current"
           echo "Current Add-on:     $current_addon"
           echo "Latest TorrServer:  $latest"
-          echo "Release name:        $release_name"
+          echo "Release name:       $release_name"
 
           if ! printf '%s\n' "$latest" | grep -Eq '^MatriX\.[0-9]+(\.[0-9]+){0,2}$'; then
             echo "Unsupported TorrServer release tag: $latest"
@@ -44,6 +44,24 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # Preflight both supported architectures before changing the repository.
+          # The Docker build performs the same checksum verification, but this
+          # prevents committing a new upstream version when release assets are
+          # missing or their GitHub-provided digests are unavailable.
+          release_tag="$latest"
+          for asset in TorrServer-linux-amd64 TorrServer-linux-arm64; do
+            expected_sha="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest' "$release_json" | sed 's/^sha256://')"
+            if [ -z "$expected_sha" ] || [ "$expected_sha" = "null" ]; then
+              echo "Missing SHA-256 digest for release asset: $asset"
+              exit 1
+            fi
+
+            asset_url="https://github.com/YouROK/TorrServer/releases/download/${release_tag}/${asset}"
+            echo "Checking release asset: $asset"
+            curl -fsIL --retry 3 --retry-delay 2 "$asset_url" >/dev/null
+            echo "Release asset OK: $asset"
+          done
 
           upstream_version="${latest#MatriX.}"
           IFS='.' read -r major minor patch <<< "$upstream_version"
