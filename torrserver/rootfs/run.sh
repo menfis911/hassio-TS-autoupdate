@@ -66,6 +66,29 @@ http {
         listen ${TS_PORT};
         server_name _;
 
+        # Home Assistant Ingress enters the add-on at /ui. TorrServer's
+        # frontend is built for relative API paths, so keep the /ui prefix
+        # in the browser URL and strip it before proxying to TorrServer.
+        location = /ui {
+            return 301 /ui/;
+        }
+
+        location /ui/ {
+            proxy_pass http://127.0.0.1:${TS_INTERNAL_PORT}/;
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host \$host;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \$connection_upgrade;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_buffering off;
+        }
+
+        # Direct LAN access keeps the normal TorrServer root URL.
         location / {
             proxy_pass http://127.0.0.1:${TS_INTERNAL_PORT};
             proxy_http_version 1.1;
