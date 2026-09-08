@@ -1,5 +1,13 @@
 # Changelog
 
+## 144.1.7 — Custom Add-on Icon
+
+### Изменено
+- Исправлено отображение иконки Add-on в Home Assistant: используется собственная иконка из `torrserver/icon.svg`.
+- Обновлён `torrserver/icon.png`, сгенерированный из новой SVG-иконки.
+- Версия Add-on повышена до `144.1.7` для принудительного обновления метаданных и иконки в Home Assistant.
+- Иконка боковой панели (`panel_icon`) не изменялась и сохранена как `mdi:movie-open-play`.
+
 ## 144.1.6 — Home Assistant UI
 
 ### Изменено
