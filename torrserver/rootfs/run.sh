@@ -3,8 +3,11 @@ set -euo pipefail
 
 TS_PORT=$(bashio::config port)
 TS_SSL_PORT=$(bashio::config ssl_port)
-mkdir -p /config /config/torrents
-FLAGS="--path /config --torrentsdir /config/torrents --port ${TS_PORT}"
+TS_INTERNAL_PORT=18090
+
+mkdir -p /config /config/torrents /run/nginx
+
+FLAGS="--path /config --torrentsdir /config/torrents --port ${TS_INTERNAL_PORT}"
 
 if [[ "$(bashio::config httpauth)" = true ]]; then
   FLAGS="${FLAGS} --httpauth"
@@ -44,9 +47,55 @@ if [[ "$(bashio::config proxymode)" != disabled ]]; then
   FLAGS="${FLAGS} --proxyurl=${PROXY_URL} --proxymode=${PROXY_MODE}"
 fi
 
-bashio::log.info "Starting TorrServer on HTTP port ${TS_PORT}"
-if [[ "$(bashio::config ssl)" = true ]]; then
-  bashio::log.info "HTTPS enabled on port ${TS_SSL_PORT}"
-fi
+cat > /run/nginx/nginx.conf <<EOF
+worker_processes 1;
+pid /run/nginx/nginx.pid;
+error_log /dev/stderr warn;
 
-exec /usr/bin/torrserver ${FLAGS}
+events {
+    worker_connections 1024;
+}
+
+http {
+    map \$http_upgrade \$connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    server {
+        listen ${TS_PORT};
+        server_name _;
+
+        location / {
+            proxy_pass http://127.0.0.1:${TS_INTERNAL_PORT};
+            proxy_http_version 1.1;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host \$host;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection \$connection_upgrade;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_buffering off;
+        }
+    }
+}
+EOF
+
+bashio::log.info "Starting TorrServer on internal HTTP port ${TS_INTERNAL_PORT}"
+if [[ "$(bashio::config ssl)" = true ]]; then
+  bashio::log.info "TorrServer HTTPS is enabled on port ${TS_SSL_PORT}"
+fi
+bashio::log.info "Starting Home Assistant web proxy on port ${TS_PORT}"
+
+/usr/bin/torrserver ${FLAGS} &
+TS_PID=$!
+
+cleanup() {
+  kill "${TS_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+nginx -c /run/nginx/nginx.conf -g 'daemon off;'
