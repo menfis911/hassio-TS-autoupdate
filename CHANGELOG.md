@@ -2,6 +2,24 @@
 
 Все изменения проекта фиксируются здесь. Версия Home Assistant Add-on соответствует версии проекта, а `UPSTREAM_VERSION` содержит точную версию TorrServer.
 
+## 144.1.12 — MQTT Uptime sensor
+
+### Добавлено
+- Добавлен MQTT Discovery-сенсор `Uptime` для TorrServer.
+- Uptime публикуется в секундах с `device_class: duration`.
+- Счётчик uptime автоматически начинается заново после каждого запуска или автоматического restart TorrServer.
+- Uptime обновляется вместе с существующими MQTT-метриками.
+
+### Сохранено
+- TorrServer `MatriX.144.1`.
+- Home Assistant Ingress `/ui/`.
+- Прямой доступ через порт `8090`.
+- WebSocket и streaming.
+- Автоматический healthcheck и recovery TorrServer.
+- Все существующие настройки TorrServer.
+- MQTT Discovery для Status, Version, Torrents, Storage free и Restarts.
+- Собственная иконка Add-on и `panel_icon: mdi:movie-open-play`.
+
 ## 144.1.11 — MQTT Discovery fix & diagnostics
 
 ### Исправлено
