@@ -160,10 +160,9 @@ mqtt_metrics_loop() {
 
   local echo_response torrent_count free_kb free_gb auth_args=()
   if bashio::config.true httpauth; then
-    local first_login
-    first_login="$(bashio::config 'logins|0|username')"
-    local first_password
-    first_password="$(bashio::config 'logins|0|password')"
+    local first_login first_password
+    first_login="$(bashio::config 'logins[0].username')"
+    first_password="$(bashio::config 'logins[0].password')"
     auth_args=(-u "${first_login}:${first_password}")
   fi
 
