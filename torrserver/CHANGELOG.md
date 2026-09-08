@@ -1,5 +1,13 @@
 # Changelog
 
+## 144.1.8 — Add-on Icon Fix
+
+### Исправлено
+- Исправлена автоматическая генерация `torrserver/icon.png` из `torrserver/icon.svg`.
+- Исправлена ошибка GitHub Actions, из-за которой PNG-иконка не генерировалась.
+- Обновлена иконка Add-on в Home Assistant.
+- Иконка боковой панели (`panel_icon`) не изменялась и сохранена как `mdi:movie-open-play`.
+
 ## 144.1.7 — Custom Add-on Icon
 
 ### Изменено
