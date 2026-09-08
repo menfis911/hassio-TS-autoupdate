@@ -199,7 +199,7 @@ publish_mqtt_discovery() {
   publish_mqtt "${discovery_base}/sensor/torrserver_torrents/config" "{\"name\":\"Torrents\",\"unique_id\":\"torrserver_torrents\",\"state_topic\":\"${state_base}/torrents\",\"unit_of_measurement\":\"torrents\",\"state_class\":\"measurement\",\"icon\":\"mdi:download-multiple\",\"device\":${device}}" || failed=1
   publish_mqtt "${discovery_base}/sensor/torrserver_storage_free/config" "{\"name\":\"Storage free\",\"unique_id\":\"torrserver_storage_free\",\"state_topic\":\"${state_base}/storage_free\",\"unit_of_measurement\":\"GB\",\"device_class\":\"data_size\",\"state_class\":\"measurement\",\"icon\":\"mdi:harddisk\",\"device\":${device}}" || failed=1
   publish_mqtt "${discovery_base}/sensor/torrserver_restarts/config" "{\"name\":\"Restarts\",\"unique_id\":\"torrserver_restarts\",\"state_topic\":\"${state_base}/restarts\",\"unit_of_measurement\":\"restarts\",\"state_class\":\"total_increasing\",\"icon\":\"mdi:restart\",\"device\":${device}}" || failed=1
-  publish_mqtt "${discovery_base}/sensor/torrserver_uptime/config" "{\"name\":\"Uptime\",\"unique_id\":\"torrserver_uptime\",\"state_topic\":\"${state_base}/uptime\",\"unit_of_measurement\":\"s\",\"device_class\":\"duration\",\"state_class\":\"measurement\",\"icon\":\"mdi:timer-outline\",\"device\":${device}}" || failed=1
+  publish_mqtt "${discovery_base}/sensor/torrserver_uptime/config" "{\"name\":\"Uptime\",\"unique_id\":\"torrserver_uptime\",\"state_topic\":\"${state_base}/uptime\",\"icon\":\"mdi:timer-outline\",\"device\":${device}}" || failed=1
 
   return "${failed}"
 }
@@ -212,7 +212,7 @@ mqtt_metrics_loop() {
 
   local state_base="homeassistant/torrserver"
   local diagnostic_topic="torrserver/diagnostic"
-  local echo_response torrent_count free_kb free_gb uptime auth_args=()
+  local echo_response torrent_count free_kb free_gb uptime uptime_h uptime_m uptime_s uptime_display auth_args=()
   local mqtt_host mqtt_port mqtt_user mqtt_password mqtt_ssl
   local mqtt_connected=false
   local mqtt_failures=0
@@ -288,7 +288,11 @@ mqtt_metrics_loop() {
 
       uptime=$(( $(date +%s) - TS_STARTED_AT ))
       (( uptime < 0 )) && uptime=0
-      publish_mqtt "${state_base}/uptime" "${uptime}" || true
+      uptime_h=$((uptime / 3600))
+      uptime_m=$(((uptime % 3600) / 60))
+      uptime_s=$((uptime % 60))
+      uptime_display="${uptime_h} ч ${uptime_m} мин ${uptime_s} с"
+      publish_mqtt "${state_base}/uptime" "${uptime_display}" || true
 
       if torrent_count="$(curl -fsS --max-time 5 "${auth_args[@]}" -H 'Content-Type: application/json' -d '{"action":"list"}' "http://127.0.0.1:${TS_INTERNAL_PORT}/torrents" 2>/dev/null | jq 'length' 2>/dev/null)"; then
         publish_mqtt "${state_base}/torrents" "${torrent_count}" || true
