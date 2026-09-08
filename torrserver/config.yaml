@@ -2,7 +2,7 @@
 name: TorrServer AutoUpdate
 slug: torrserver
 description: TorrServer for Home Assistant with automatic upstream release updates
-version: 144.1.4
+version: 144.1.5
 url: https://github.com/menfis911/hassio-TS-autoupdate
 changelog: https://github.com/menfis911/hassio-TS-autoupdate/blob/main/torrserver/CHANGELOG.md
 init: false
@@ -13,6 +13,8 @@ arch:
 image: ghcr.io/menfis911/hassio-ts-autoupdate
 map:
   - addon_config:rw
+services:
+  - mqtt:need
 options:
   port: 8090
   httpauth: false
@@ -28,6 +30,7 @@ options:
   proxymode: disabled
   proxyurl: ""
   weblog: false
+  mqtt_discovery: true
 schema:
   port: "int(1024,49151)"
   httpauth: bool
@@ -43,6 +46,7 @@ schema:
   proxymode: "list(disabled|tracker|peers|full)"
   proxyurl: "str?"
   weblog: bool
+  mqtt_discovery: bool
 webui: "http://[HOST]:[PORT:8090]/"
 ingress: true
 ingress_port: 8090
