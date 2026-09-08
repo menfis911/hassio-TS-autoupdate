@@ -1,14 +1,7 @@
 # Changelog
 
-## 144.1.5 — Home Assistant sensors
-
-### Добавлено
-- MQTT Discovery для Home Assistant.
-- Сенсор текущего статуса TorrServer.
-- Сенсор версии TorrServer.
-- Сенсор количества torrent-задач.
-- Сенсор свободного места в `/config`.
-- Все сенсоры объединяются в устройство `TorrServer`.
+## 144.1.6 — Home Assistant UI
 
 ### Изменено
-- MQTT является необязательным: без доступного брокера TorrServer продолжает работать нормально.
+- Обновлена иконка TorrServer в боковой панели Home Assistant: `mdi:server-network`.
+- Версия Add-on повышена до `144.1.6`.
