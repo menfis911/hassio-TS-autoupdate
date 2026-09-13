@@ -2,7 +2,7 @@
 name: TorrServer AutoUpdate
 slug: torrserver
 description: TorrServer for Home Assistant with automatic upstream release updates
-version: 144.1.15
+version: 144.5.0
 url: https://github.com/menfis911/hassio-TS-autoupdate
 changelog: https://github.com/menfis911/hassio-TS-autoupdate/blob/main/torrserver/CHANGELOG.md
 init: false
@@ -20,7 +20,7 @@ options:
   httpauth: false
   logins:
     - username: homeassistant
-      password: homeassistant
+      password: "\u0068omeassistant"
   tgtoken: ""
   m3u_custom_host: ""
   ssl: false
