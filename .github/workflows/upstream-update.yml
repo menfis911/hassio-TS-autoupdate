@@ -2,7 +2,8 @@ name: Check TorrServer updates
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'
+    # Check every day at 03:00 MSK / 00:00 UTC.
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -53,10 +54,6 @@ jobs:
             exit 0
           fi
 
-          # Preflight both supported architectures before changing the repository.
-          # The Docker build performs the same checksum verification, but this
-          # prevents committing a new upstream version when release assets are
-          # missing or their GitHub-provided digests are unavailable.
           release_tag="$latest"
           for asset in TorrServer-linux-amd64 TorrServer-linux-arm64; do
             expected_sha="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest' "$release_json" | sed 's/^sha256://')"
@@ -78,9 +75,6 @@ jobs:
           base_addon_version="${major}.${minor}.${patch}"
           addon_version="$base_addon_version"
 
-          # The Add-on version is semver and may also contain internal fixes.
-          # Never move it backwards when an upstream release maps to a version
-          # that is already used by the project.
           if [ "$(printf '%s\n' "$current_addon" "$addon_version" | sort -V | head -n1)" != "$addon_version" ]; then
             current_major="${current_addon%%.*}"
             rest="${current_addon#*.}"
