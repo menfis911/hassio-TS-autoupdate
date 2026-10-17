@@ -1,16 +1,22 @@
 # Changelog
 
-## MatriX.146.2 — 2026-10-14
+## MatriX.147 — 2026-10-16
 
-**TorrServer:** `MatriX.146.2`  
-**Upstream release:** MatriX.146.2
+**TorrServer:** `MatriX.147`  
+**Upstream release:** MatriX.147
 
 ### Release notes from upstream
 
 ## What's Changed
-* feat(gst): add VAAPI hardware encoder backend by @Whishp in https://github.com/YouROK/TorrServer/pull/915
+* External subtitles support by @alexeynl in https://github.com/YouROK/TorrServer/pull/911
+* Torznab: fix API URL handling and add User-Agent header by @VuzzyM in https://github.com/YouROK/TorrServer/pull/919
+* docs: update Torznab configuration documentation and UI hints by @pavelpikta in https://github.com/YouROK/TorrServer/pull/920
+* docs: update README documentation by @pavelpikta in https://github.com/YouROK/TorrServer/pull/921
+* fix(utils): sort "Episode 1" before "Episode 10" in file lists by @jayhemnani9910 in https://github.com/YouROK/TorrServer/pull/913
+* fix(m3u): number merged all.m3u files the way /stream does by @jayhemnani9910 in https://github.com/YouROK/TorrServer/pull/914
 
 ## New Contributors
-* @Whishp made their first contribution in https://github.com/YouROK/TorrServer/pull/915
+* @alexeynl made their first contribution in https://github.com/YouROK/TorrServer/pull/911
+* @jayhemnani9910 made their first contribution in https://github.com/YouROK/TorrServer/pull/913
 
-**Full Changelog**: https://github.com/YouROK/TorrServer/compare/MatriX.146.1...MatriX.146.2
+**Full Changelog**: https://github.com/YouROK/TorrServer/compare/MatriX.146.2...MatriX.147
