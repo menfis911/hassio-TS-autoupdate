@@ -45,7 +45,125 @@ jobs:
           echo "Release name:       $release_name"
           echo "Dry run:            $DRY_RUN"
 
-          if ! printf '%s\n' "$latest" | grep -Eq '^MatriX\.[0-9]+(\.[0-9]+){0,2}$'; then
+          if ! printf '%s\n' "$latest" | grep -Eq '^(MatriX|Silo)\.[0-9]+(\.[0-9]+){0,2}; then
+            echo "Unsupported TorrServer release tag: $latest"
+            exit 1
+          fi
+
+          if [ "$current" = "$latest" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          release_tag="$latest"
+          for asset in TorrServer-linux-amd64 TorrServer-linux-arm64; do
+            expected_sha="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest' "$release_json" | sed 's/^sha256://')"
+            if [ -z "$expected_sha" ] || [ "$expected_sha" = "null" ]; then
+              echo "Missing SHA-256 digest for release asset: $asset"
+              exit 1
+            fi
+
+            asset_url="https://github.com/YouROK/TorrServer/releases/download/${release_tag}/${asset}"
+            echo "Checking release asset: $asset"
+            curl -fsIL --retry 3 --retry-delay 2 "$asset_url" >/dev/null
+            echo "Release asset OK: $asset (sha256: $expected_sha)"
+          done
+
+          # Add-on versions are monotonic and independent of upstream release naming.
+          # Keep the current major/minor series; increment patch for each new upstream tag.
+          if ! printf '%s\n' "$current_addon" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Invalid current add-on version: $current_addon"
+            exit 1
+          fi
+          major="${current_addon%%.*}"
+          rest="${current_addon#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+          addon_version="${major}.${minor}.$((patch + 1))"
+
+          if ! printf '%s\n' "$addon_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Cannot derive Home Assistant version from $latest"
+            exit 1
+          fi
+
+          release_date="$(jq -r '.published_at // .created_at // ""' "$release_json" | cut -d'T' -f1)"
+          release_body="$(jq -r '.body // "No release notes were provided by upstream."' "$release_json")"
+
+          echo "Derived Add-on version: $addon_version"
+          echo "Release date:           ${release_date:-unknown}"
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN: validation completed successfully; repository will not be modified."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          printf '%s\n' "$latest" > torrserver/UPSTREAM_VERSION
+          sed -i -E "s/^version: .*/version: ${addon_version}/" torrserver/config.yaml
+
+          python3 - "$release_name" "$latest" "$release_date" "$release_body" <<'PY'
+          from pathlib import Path
+          import sys
+
+          name, tag, date, body = sys.argv[1:]
+          title = name if name and name != "null" else tag
+          date_suffix = f" — {date}" if date else ""
+          notes = body.strip() or "No release notes were provided by upstream."
+
+          root = Path("CHANGELOG.md")
+          existing = root.read_text(encoding="utf-8") if root.exists() else "# Changelog\n\n"
+          marker = f"## {tag}"
+          if marker not in existing:
+              entry = (
+                  f"## {tag}{date_suffix}\n\n"
+                  f"**TorrServer:** `{tag}`  \n"
+                  f"**Upstream release:** {title}\n\n"
+                  "### Release notes from upstream\n\n"
+                  f"{notes}\n\n"
+              )
+              prefix = "# Changelog\n\n"
+              if existing.startswith(prefix):
+                  existing = existing[len(prefix):]
+              root.write_text(prefix + entry + existing, encoding="utf-8")
+
+          addon = Path("torrserver/CHANGELOG.md")
+          addon_text = (
+              "# Changelog\n\n"
+              f"## {tag}{date_suffix}\n\n"
+              f"**TorrServer:** `{tag}`  \n"
+              f"**Upstream release:** {title}\n\n"
+              "### Release notes from upstream\n\n"
+              f"{notes}\n"
+          )
+          addon.write_text(addon_text, encoding="utf-8")
+          PY
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "addon_version=$addon_version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit update
+        if: steps.release.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md torrserver/UPSTREAM_VERSION torrserver/config.yaml torrserver/CHANGELOG.md
+          git commit -m "Update TorrServer to ${{ steps.release.outputs.latest }}"
+          git push
+
+      - name: Trigger image build
+        if: steps.release.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "Triggering image build workflow for the updated main branch..."
+          gh workflow run build.yml --ref main
+; then
             echo "Unsupported TorrServer release tag: $latest"
             exit 1
           fi
